@@ -1,0 +1,25 @@
+VAEConfig:
+  depth: 3
+  device: cuda
+  dim_ae: 128
+  dim_head: 12
+  dim_latent: 512
+  latent_token_n: 16
+  max_output_token: 512
+  lm_model_name: Qwen/Qwen2.5-0.5B
+  latent_seed: 42
+TrainConfig:
+  data_path: "data/pathway_cot_dataset_final.csv"
+  batch_size: 2
+  epochs: 10
+  kl_weight: 1  
+  log_every: 10
+  save_every: 1000
+  warmup_steps: 1000
+  num_samples: 9000
+  optim_cfg:
+      lr: 0.0001
+      weight_decay: 0.01
+      betas: [0.9, 0.999]
+device: cuda
+seed: 42
