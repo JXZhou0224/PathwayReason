@@ -5,7 +5,11 @@ import torch
 from torch import nn, einsum
 import torch.nn.functional as F
 
-
+"""
+1. base model size
+2. latent size
+3. question
+"""
 from einops import rearrange, reduce, repeat
 
 

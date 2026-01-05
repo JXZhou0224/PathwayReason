@@ -5,7 +5,7 @@ VAEConfig:
   dim_head: 12
   dim_latent: 512
   latent_token_n: 16
-  max_output_token: 512
+  max_output_token: 128
   lm_model_name: Qwen/Qwen2.5-0.5B
   latent_seed: 42
 TrainConfig:

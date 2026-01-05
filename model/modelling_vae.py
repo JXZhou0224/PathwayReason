@@ -44,13 +44,12 @@ class VAEModel(nn.Module):
 
     def load_ckpt(self, path: str, strict: bool = True):
         state = torch.load(path, map_location="cpu")
-        self.vae.load_state_dict(state, strict=strict)
+        self.vae.load_state_dict(state["model"], strict=strict)
 
     def preprocess_text(self,inputs):
         """
         inputs: {"system","content"}
         """
-        encoder_inputs = []
         systems = [ins + "\n" for ins in inputs["system"]]
         contents = inputs["content"]
         batch_size = len(systems)
@@ -90,59 +89,72 @@ class VAEModel(nn.Module):
         mu, logvar = self.vae.encode(last_hidden_state, content_attention_mask)
         return mu, logvar
     
-    def decode(
-        self,
-        ae_latents,          # [B, D]
-    ):
-        """
-        Returns:
-            logits: [B, T, V]
-            tokens: [B, T]
-        """
-        decoder_outputs = self.vae.decode(ae_latents)
-        device = decoder_outputs.device
-        batch_size = decoder_outputs.size(0)
+    def decode(self, ae_latents):
+        device = ae_latents.device
+        B = ae_latents.size(0)
         max_len = self.cfg.max_output_token
 
         eos_id = self.tokenizer.eos_token_id
         pad_id = self.tokenizer.pad_token_id
 
-        tokens = None
-        finished = torch.zeros(batch_size, dtype=torch.bool, device=device)
+        # prefix (from VAE)
+        prefix_embeds = self.vae.decode(ae_latents)   # [B, P, D]
 
+        tokens = []
         logits_all = []
-        past_kv = None
-        inputs_embeds = decoder_outputs
-        for t in range(max_len):
-            token_embeds = self.lm_model.get_input_embeddings()(tokens[:, -1:]) if tokens is not None else None
+        finished = torch.zeros(B, dtype=torch.bool, device=device)
 
-            inputs_embeds = torch.cat([inputs_embeds, token_embeds], dim=1) if token_embeds is not None else decoder_outputs
+        # ---- step 0: run prefix once ----
+        out = self.lm_model(
+            inputs_embeds=prefix_embeds,
+            use_cache=True,
+        )
+        past_kv = out.past_key_values
+
+        step_logits = out.logits[:, -1]          # [B, V]
+        next_token = step_logits.argmax(-1)
+
+        logits_all.append(step_logits)
+        tokens.append(next_token)
+
+        finished |= next_token.eq(eos_id)
+
+        # ---- autoregressive steps ----
+        for _ in range(1, max_len):
+            token_embeds = self.lm_model.get_input_embeddings()(
+                next_token[:, None]
+            )  # [B,1,D]
 
             out = self.lm_model(
-                inputs_embeds=inputs_embeds,
+                inputs_embeds=token_embeds,
                 past_key_values=past_kv,
                 use_cache=True,
             )
-
-            step_logits = out.logits[:, -1]    # [B, V]
             past_kv = out.past_key_values
-            logits_all.append(step_logits)
-            next_token = step_logits.argmax(dim=-1)
 
-            # once EOS, always PAD
+            step_logits = out.logits[:, -1]       # [B,V]
+            next_token = step_logits.argmax(-1)
+
+            # once EOS → PAD
             next_token = torch.where(
                 finished,
                 torch.full_like(next_token, pad_id),
                 next_token,
             )
 
-            finished |= next_token.eq(eos_id)
-            tokens = torch.cat([tokens, next_token[:, None]], dim=1) if tokens is not None else next_token[:, None]
+            logits_all.append(step_logits)
+            tokens.append(next_token)
 
-        logits = torch.stack(logits_all, dim=1)     # [B, T, V]
-        tokens = tokens[:, 1:]                      # drop BOS → [B, T]
+            finished |= next_token.eq(eos_id)
+            if finished.all():
+                break
+
+        # stack
+        logits = torch.stack(logits_all, dim=1)   # [B,T,V]
+        tokens = torch.stack(tokens, dim=1)       # [B,T]
 
         return logits, tokens
+
     
     def decode_text(self, ae_latents):
         _, tokens = self.decode(ae_latents)   # tokens: [B, T], padded
