@@ -93,7 +93,7 @@ if __name__ == "__main__":
     vae_cfg = VAEConfig(**cfg["VAEConfig"])
     model = VAEModel(vae_cfg)
     model.load_ckpt(ckpt_path)
-    infer_and_dump_npz(model,data_path,out_path,batch_size=80,num_samples=-1)
+    infer_and_dump_npz(model,data_path,out_path,batch_size=args.batch_size,num_samples=-1)
     # data = np.load(out_path)["Z"][:2]
     # data = torch.from_numpy(data).to("cuda")
     # print("decoding start")
