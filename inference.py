@@ -82,7 +82,7 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_path", default="runs/case_1_kl_weight_1/ckpt/step_2600.pt")
     parser.add_argument("--data_path", default="data/pathway_cot_dataset_final_inits.csv")
     parser.add_argument("--out_path", default="data/embeds_intermediate.npz")
-
+    parser.add_argument("--batch_size", default=64)
     args = parser.parse_args()
 
     cfg_path = args.cfg_path
